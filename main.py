@@ -12,6 +12,8 @@ from openai import OpenAI
 from pydub import AudioSegment
 from urllib.parse import urlparse
 from glob import glob
+import webvtt
+from datetime import datetime, timedelta
 
 # Load environment variables from .env file
 load_dotenv()
@@ -46,13 +48,13 @@ def split_large_mp3(mp3_file):
         chunks = int((len(audio) / duration_per_chunk) + 1)
         
         for i in range(chunks):
-            split_file = mp3_file.replace(".mp3", f"-part{i+1}.mp3")
-            if not os.path.exists(split_file):
+            start_time = i * duration_per_chunk
+            chunk_file = mp3_file.replace(".mp3", f"-{start_time}.mp3")
+            if not os.path.exists(chunk_file):
                 print(f"Creating chunk {(i + 1)} of {chunks}")
-                start_time = i * duration_per_chunk
                 end_time = min((i + 1) * duration_per_chunk, len(audio))
-                split_audio = audio[start_time:end_time]
-                split_audio.export(split_file, format="mp3")
+                chunk_audio = audio[start_time:end_time]
+                chunk_audio.export(chunk_file, format="mp3")
 
 # Function to check if an English transcript exists for a given mp3 file
 def check_transcript(mp3_file):
@@ -68,10 +70,10 @@ def create_transcript(mp3_file, openai_api_key):
         if os.path.getsize(mp3_file) > 20 * 1024 * 1024:
             split_large_mp3(mp3_file)
             transcript_text = ""
-            for part in sorted(glob(mp3_file.replace(".mp3", "-part*.mp3"))):
-                transcript_part_file = part.replace(".mp3", "-en.txt")
-                if not os.path.exists(transcript_part_file):
-                    with open(part, "rb") as audio:
+            for chunk in sorted(glob(mp3_file.replace(".mp3", "-*.mp3"))):
+                transcript_chunk_file = chunk.replace(".mp3", "-en.txt")
+                if not os.path.exists(transcript_chunk_file):
+                    with open(chunk, "rb") as audio:
                         response = client.audio.transcriptions.create(
                             model="whisper-1",
                             file=audio,
@@ -81,7 +83,7 @@ def create_transcript(mp3_file, openai_api_key):
                             transcript_text = response["text"]
                         else:
                             transcript_text = str(response)
-                    with open(transcript_part_file, "w") as f:
+                    with open(transcript_chunk_file, "w") as f:
                         f.write(transcript_text)
         else:
             transcript_file = os.path.splitext(mp3_file)[0] + "-en.txt"
@@ -111,15 +113,23 @@ def check_subtitles(mp3_file):
 def create_subtitles(mp3_file, openai_api_key):
     client = OpenAI(api_key=openai_api_key)
     
+    def adjust_time(timestamp, seconds):
+        t = datetime.strptime(timestamp, "%H:%M:%S.%f")
+        d = timedelta(seconds=seconds)
+        new_timestamp = t + d
+        return new_timestamp.strftime("%H:%M:%S.%f")
+
     try:
         # Check if the MP3 file needs to be split into chunks
         if os.path.getsize(mp3_file) > 20 * 1024 * 1024:
             split_large_mp3(mp3_file)
-            for part in sorted(glob(mp3_file.replace(".mp3", "-part*.mp3"))):
-                subtitles_part_file = part.replace(".mp3", "-en.vtt")
-                if not os.path.exists(subtitles_part_file):
-                    print(f"Creating subtitles for chunk: {part}")  # Debug print
-                    with open(part, "rb") as audio:
+            for chunk in sorted(glob(mp3_file.replace(".mp3", "-*.mp3"))):
+                start_time_str = chunk.split("-")[-1].replace(".mp3", "")
+                start_time_seconds = int(start_time_str) / 1000  # Convert from milliseconds to seconds
+                subtitles_file = chunk.replace(".mp3", "-en.vtt")
+                if not os.path.exists(subtitles_file):
+                    print(f"Creating subtitles for chunk: {chunk}")  # Debug print
+                    with open(chunk, "rb") as audio:
                         response = client.audio.transcriptions.create(
                             model="whisper-1",
                             file=audio,
@@ -127,13 +137,18 @@ def create_subtitles(mp3_file, openai_api_key):
                         )
                         if isinstance(response, dict) and "content" in response:
                             subtitles_text = response["content"]
+                            vtt = webvtt.reads(subtitles_text)
+                            for caption in vtt:
+                                caption.start = adjust_time(caption.start, start_time_seconds)
+                                caption.end = adjust_time(caption.end, start_time_seconds)
+                            subtitles_text = vtt.content
                         else:
                             subtitles_text = str(response)
-                        with open(subtitles_part_file, "w") as f:
+                        with open(subtitles_file, "w") as f:
                             f.write(subtitles_text)
                     # Check if the subtitles file is empty and print an error if it is
-                    if os.path.getsize(subtitles_part_file) == 0:
-                        print(f"Error: Subtitles file {subtitles_part_file} is empty.")
+                    if os.path.getsize(subtitles_file) == 0:
+                        print(f"Error: Subtitles file {subtitles_file} is empty.")
         else:
             subtitles_file = os.path.splitext(mp3_file)[0] + "-en.vtt"
             if not os.path.exists(subtitles_file):
