@@ -128,7 +128,6 @@ def create_subtitles(mp3_file, openai_api_key):
                 start_time_seconds = int(start_time_str) / 1000  # Convert from milliseconds to seconds
                 subtitles_file = chunk.replace(".mp3", "-en.vtt")
                 if not os.path.exists(subtitles_file):
-                    print(f"Creating subtitles for chunk: {chunk}")  # Debug print
                     with open(chunk, "rb") as audio:
                         response = client.audio.transcriptions.create(
                             model="whisper-1",
@@ -136,16 +135,16 @@ def create_subtitles(mp3_file, openai_api_key):
                             response_format="vtt"
                         )
                         if isinstance(response, dict) and "content" in response:
-                            subtitles_text = response["content"]
-                            vtt = webvtt.reads(subtitles_text)
-                            for caption in vtt:
-                                caption.start = adjust_time(caption.start, start_time_seconds)
-                                caption.end = adjust_time(caption.end, start_time_seconds)
-                            subtitles_text = vtt.content
+                            with open(subtitles_file, "w") as f:
+                                f.write(response["content"])
                         else:
-                            subtitles_text = str(response)
-                        with open(subtitles_file, "w") as f:
-                            f.write(subtitles_text)
+                            with open(subtitles_file, "w") as f:
+                                f.write(str(response))
+                    vtt = webvtt.read(subtitles_file)
+                    for caption in vtt.captions:
+                        caption.start = adjust_time(caption.start, start_time_seconds)
+                        caption.end = adjust_time(caption.end, start_time_seconds)
+                    vtt.save(subtitles_file)
                     # Check if the subtitles file is empty and print an error if it is
                     if os.path.getsize(subtitles_file) == 0:
                         print(f"Error: Subtitles file {subtitles_file} is empty.")
@@ -159,11 +158,16 @@ def create_subtitles(mp3_file, openai_api_key):
                         response_format="vtt"
                     )
                     if isinstance(response, dict) and "content" in response:
-                        subtitles_text = response["content"]
+                        with open(subtitles_file, "w") as f:
+                            f.write(response["content"])
                     else:
-                        subtitles_text = str(response)
-                    with open(subtitles_file, "w") as f:
-                        f.write(subtitles_text)
+                        with open(subtitles_file, "w") as f:
+                            f.write(str(response))
+                vtt = webvtt.read(subtitles_file)
+                for caption in vtt.captions:
+                    caption.start = adjust_time(caption.start, 0)
+                    caption.end = adjust_time(caption.end, 0)
+                vtt.save(subtitles_file)
                 # Check if the subtitles file is empty and print an error if it is
                 if os.path.getsize(subtitles_file) == 0:
                     print(f"Error: Subtitles file {subtitles_file} is empty.")
@@ -216,3 +220,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
