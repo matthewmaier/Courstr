@@ -70,7 +70,8 @@ def create_transcript(mp3_file, openai_api_key):
         if os.path.getsize(mp3_file) > 20 * 1024 * 1024:
             split_large_mp3(mp3_file)
             transcript_text = ""
-            for chunk in sorted(glob(mp3_file.replace(".mp3", "-*.mp3"))):
+            chunk_files = sorted(glob(mp3_file.replace(".mp3", "-*.mp3")))
+            for chunk in chunk_files:
                 transcript_chunk_file = chunk.replace(".mp3", "-en.txt")
                 if not os.path.exists(transcript_chunk_file):
                     with open(chunk, "rb") as audio:
@@ -80,11 +81,17 @@ def create_transcript(mp3_file, openai_api_key):
                             response_format="text"
                         )
                         if isinstance(response, dict) and "text" in response:
-                            transcript_text = response["text"]
+                            transcript_text += response["text"]
                         else:
-                            transcript_text = str(response)
+                            transcript_text += str(response)
                     with open(transcript_chunk_file, "w") as f:
                         f.write(transcript_text)
+            # Combine all transcript chunks into one file
+            with open(os.path.splitext(mp3_file)[0] + "-en.txt", "w") as combined_transcript:
+                for chunk_file in chunk_files:
+                    transcript_chunk_file = chunk_file.replace(".mp3", "-en.txt")
+                    with open(transcript_chunk_file, "r") as f:
+                        combined_transcript.write(f.read())
         else:
             transcript_file = os.path.splitext(mp3_file)[0] + "-en.txt"
             if not os.path.exists(transcript_file):
@@ -123,7 +130,8 @@ def create_subtitles(mp3_file, openai_api_key):
         # Check if the MP3 file needs to be split into chunks
         if os.path.getsize(mp3_file) > 20 * 1024 * 1024:
             split_large_mp3(mp3_file)
-            for chunk in sorted(glob(mp3_file.replace(".mp3", "-*.mp3"))):
+            chunk_files = sorted(glob(mp3_file.replace(".mp3", "-*.mp3")))
+            for chunk in chunk_files:
                 start_time_str = chunk.split("-")[-1].replace(".mp3", "")
                 start_time_seconds = int(start_time_str) / 1000  # Convert from milliseconds to seconds
                 subtitles_file = chunk.replace(".mp3", "-en.vtt")
@@ -148,6 +156,12 @@ def create_subtitles(mp3_file, openai_api_key):
                     # Check if the subtitles file is empty and print an error if it is
                     if os.path.getsize(subtitles_file) == 0:
                         print(f"Error: Subtitles file {subtitles_file} is empty.")
+            # Combine all subtitle chunks into one file
+            with open(os.path.splitext(mp3_file)[0] + "-en.vtt", "w") as combined_subtitles:
+                for chunk_file in chunk_files:
+                    subtitles_chunk_file = chunk_file.replace(".mp3", "-en.vtt")
+                    with open(subtitles_chunk_file, "r") as f:
+                        combined_subtitles.write(f.read())
         else:
             subtitles_file = os.path.splitext(mp3_file)[0] + "-en.vtt"
             if not os.path.exists(subtitles_file):
