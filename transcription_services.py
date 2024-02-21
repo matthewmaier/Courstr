@@ -109,7 +109,9 @@ def create_subtitles(mp3_file, openai_api_key):
                         print(f"Error: Subtitles file {subtitles_file} is empty.")
             # Combine all subtitle chunks into one file
             with open(os.path.splitext(mp3_file)[0] + "-en.vtt", "w") as combined_subtitles:
-                for chunk_file in chunk_files:
+                # Sort the chunk files to ensure they are in the correct order
+                sorted_chunk_files = sorted(chunk_files, key=lambda x: int(x.split('-')[-1].replace(".mp3", "")))
+                for chunk_file in sorted_chunk_files:
                     subtitles_chunk_file = chunk_file.replace(".mp3", "-en.vtt")
                     with open(subtitles_chunk_file, "r") as f:
                         combined_subtitles.write(f.read())
