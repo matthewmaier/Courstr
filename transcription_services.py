@@ -39,7 +39,9 @@ def create_transcript(mp3_file, openai_api_key):
                         f.write(transcript_text)
             # Combine all transcript chunks into one file
             with open(os.path.splitext(mp3_file)[0] + "-en.txt", "w") as combined_transcript:
-                for chunk_file in chunk_files:
+                # Sort the chunk files to ensure they are in the correct order
+                sorted_chunk_files = sorted(chunk_files, key=lambda x: int(x.split('-')[-1].replace(".mp3", "")))
+                for chunk_file in sorted_chunk_files:
                     transcript_chunk_file = chunk_file.replace(".mp3", "-en.txt")
                     with open(transcript_chunk_file, "r") as f:
                         combined_transcript.write(f.read())
