@@ -32,9 +32,9 @@ def create_transcript(mp3_file, openai_api_key):
                             response_format="text"
                         )
                         if isinstance(response, dict) and "text" in response:
-                            transcript_text += response["text"]
+                            transcript_text = response["text"]
                         else:
-                            transcript_text += str(response)
+                            transcript_text = str(response)
                     with open(transcript_chunk_file, "w") as f:
                         f.write(transcript_text)
             # Combine all transcript chunks into one file
